@@ -102,8 +102,22 @@
             </div>
 
             <div class="chat-input-wrapper">
+                <div id="imagePreviewContainer" class="image-preview" style="display: none;">
+                    <img id="imagePreview" src="" alt="Preview">
+                    <button type="button" id="removeImageBtn" class="remove-btn">×</button>
+                </div>
                 <form id="chatForm" class="input-form">
+                    <button type="button" id="uploadBtn" class="icon-btn tooltip" data-tooltip="Upload Image">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    </button>
+                    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                    
+                    <button type="button" id="micBtn" class="icon-btn tooltip" data-tooltip="Use Voice">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                    </button>
+                    
                     <input type="text" id="userInput" placeholder="Describe your repair scenario..." autocomplete="off">
+                    
                     <button type="submit" id="sendButton" class="send-btn">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>

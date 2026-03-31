@@ -6,6 +6,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const promptChips = document.querySelectorAll('.prompt-chip');
     const clearChatBtn = document.getElementById('clearChatBtn');
     
+    // Advanced features elements
+    const uploadBtn = document.getElementById('uploadBtn');
+    const imageInput = document.getElementById('imageInput');
+    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+    const imagePreview = document.getElementById('imagePreview');
+    const removeImageBtn = document.getElementById('removeImageBtn');
+    const micBtn = document.getElementById('micBtn');
+
+    let currentImageData = null;
+    let isVoiceMode = false;
+    
     // Core state: conversational history required for stateless serverless backend
     let conversationHistory = [];
 
@@ -39,7 +50,26 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'bubble';
-        bubbleDiv.innerHTML = isUser ? `<p>${content}</p>` : formatMessage(content);
+        
+        let innerHtml = '';
+        if (isUser) {
+            innerHtml = `<p>${content}</p>`;
+        } else if (typeof content === 'object') {
+            let badgeSvg = content.safety_level === 'Green' ? '🟢' : content.safety_level === 'Yellow' ? '🟡' : '🔴';
+            innerHtml += `<div class="safety-badge badge-${content.safety_level}">${badgeSvg} Safety: ${content.safety_level}</div>`;
+            
+            if (content.tools_needed && content.tools_needed.length > 0) {
+                innerHtml += `<ul class="tools-checklist"><strong>Tools & Materials</strong>`;
+                content.tools_needed.forEach(tool => {
+                    innerHtml += `<li>${tool}</li>`;
+                });
+                innerHtml += `</ul>`;
+            }
+            innerHtml += formatMessage(content.explanation);
+        } else {
+            innerHtml = formatMessage(content);
+        }
+        bubbleDiv.innerHTML = innerHtml;
         
         messageDiv.appendChild(avatarDiv);
         messageDiv.appendChild(bubbleDiv);
@@ -67,16 +97,23 @@ document.addEventListener('DOMContentLoaded', () => {
     async function sendMessage(messageText) {
         setTypingTarget(true);
         
+        const payload = { 
+            message: messageText,
+            history: conversationHistory 
+        };
+        if (currentImageData) {
+            payload.image = currentImageData;
+            // Clear image after sending
+            removeImageBtn.click();
+        }
+
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ 
-                    message: messageText,
-                    history: conversationHistory 
-                }),
+                body: JSON.stringify(payload),
             });
             
             if (!response.ok) throw new Error('API Sync Failed');
@@ -87,10 +124,17 @@ document.addEventListener('DOMContentLoaded', () => {
             // Render the response
             addMessage(data.response, false);
             
-            // Mutate state with new exchanges
+            // Voice output if requested via mic
+            if (isVoiceMode && typeof data.response === 'object') {
+                const utterance = new SpeechSynthesisUtterance(data.response.explanation);
+                window.speechSynthesis.speak(utterance);
+                isVoiceMode = false; // reset for next turn
+            }
+            
+            // Mutate state with new exchanges (store text only for history to save space)
             conversationHistory.push(
                 { role: 'user', content: messageText },
-                { role: 'model', content: data.response }
+                { role: 'model', content: typeof data.response === 'object' ? data.response.explanation : data.response }
             );
 
             // Optional: Cap history size to prevent massive payload issues (e.g. keep last 10 messages)
@@ -143,4 +187,63 @@ document.addEventListener('DOMContentLoaded', () => {
         
         addMessage("Session memory flushed. Starting anew.", false);
     });
+
+    // Image Upload Logic
+    uploadBtn.addEventListener('click', () => imageInput.click());
+    
+    imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                currentImageData = event.target.result;
+                imagePreview.src = currentImageData;
+                imagePreviewContainer.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    removeImageBtn.addEventListener('click', () => {
+        currentImageData = null;
+        imagePreview.src = '';
+        imagePreviewContainer.style.display = 'none';
+        imageInput.value = '';
+    });
+
+    // Web Speech API Voice Logic
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.lang = 'en-US';
+
+        micBtn.addEventListener('click', () => {
+            recognition.start();
+        });
+
+        recognition.onstart = () => {
+            micBtn.classList.add('recording');
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            userInput.value = transcript;
+            isVoiceMode = true; // Flag to read response aloud
+            // We can even submit it automatically:
+            handleTransaction(new Event('submit', { cancelable: true }));
+        };
+
+        recognition.onspeechend = () => {
+            recognition.stop();
+            micBtn.classList.remove('recording');
+        };
+
+        recognition.onerror = () => {
+            micBtn.classList.remove('recording');
+        };
+    } else {
+        micBtn.style.display = 'none'; // Not supported
+    }
+
 });

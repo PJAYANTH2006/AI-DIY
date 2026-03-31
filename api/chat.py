@@ -3,6 +3,7 @@ import json
 import re
 from datetime import datetime
 import os
+import base64
 import google.generativeai as genai
 
 # Configure Gemini
@@ -26,17 +27,22 @@ class handler(BaseHTTPRequestHandler):
             user_message = data.get('message', '').strip()
             # History passed from client side to maintain context statelessly
             client_history = data.get('history', [])
+            image_data = data.get('image', None)
             
             # Validate message topic (only strictly required on first message)
             if not self.is_home_repair_related(user_message) and len(client_history) == 0:
-                response = (
-                    "I specialize in DIY home repair advice. Please ask about:\n"
-                    "- Plumbing (leaks, clogs, toilets)\n"
-                    "- Electrical (outlets, wiring)\n"
-                    "- Carpentry (furniture, shelves)\n"
-                    "- Painting (walls, prep work)\n"
-                    "- General home maintenance"
-                )
+                response = {
+                    "explanation": (
+                        "I specialize in DIY home repair advice. Please ask about:\n"
+                        "- Plumbing (leaks, clogs, toilets)\n"
+                        "- Electrical (outlets, wiring)\n"
+                        "- Carpentry (furniture, shelves)\n"
+                        "- Painting (walls, prep work)\n"
+                        "- General home maintenance"
+                    ),
+                    "tools_needed": [],
+                    "safety_level": "Green"
+                }
                 self.send_json_response(response)
                 return
             
@@ -51,12 +57,32 @@ class handler(BaseHTTPRequestHandler):
             # Get response from Gemini statelessly using the history array
             try:
                 chat = model.start_chat(history=gemini_history)
-                gemini_response = chat.send_message(
+                
+                parts = []
+                if image_data:
+                    if ',' in image_data:
+                        image_data = image_data.split(',')[1]
+                    parts.append({"mime_type": "image/jpeg", "data": base64.b64decode(image_data)})
+                
+                parts.append(
                     f"Respond as a DIY home repair expert.\n"
-                    f"Provide step-by-step instructions with safety considerations.\n"
+                    f"Return ONLY a valid JSON object with EXACTLY these keys:\n"
+                    f"1. 'explanation': Markdown formatted step-by-step instructions.\n"
+                    f"2. 'tools_needed': A JSON array of strings for all required tools and materials.\n"
+                    f"3. 'safety_level': Strictly 'Green', 'Yellow', or 'Red'.\n"
                     f"User Request: {user_message}"
                 )
-                response = gemini_response.text
+                
+                gemini_response = chat.send_message(parts)
+                raw_text = gemini_response.text.strip()
+                if raw_text.startswith("```json"):
+                    raw_text = raw_text[7:]
+                if raw_text.startswith("```"):
+                    raw_text = raw_text[3:]
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3]
+                
+                response = json.loads(raw_text.strip())
             except Exception as e:
                 response = self.get_fallback_response(user_message)
             
@@ -95,8 +121,16 @@ class handler(BaseHTTPRequestHandler):
             r'\bpaint|brush|roller\b': "Painting tips: 1) Clean and prep walls, fill holes 2) Use painter's tape on edges 3) Cut in edges with a brush first 4) Use a roller in a 'W' pattern for main walls."
         }
         
-        for pattern, response in simple_responses.items():
+        for pattern, response_text in simple_responses.items():
             if re.search(pattern, user_message.lower()):
-                return response
+                return {
+                    "explanation": response_text,
+                    "tools_needed": ["Basic tools"],
+                    "safety_level": "Yellow"
+                }
                 
-        return "I can help with plumbing, electrical, painting, and other home repairs. Could you provide more details about your project?"
+        return {
+            "explanation": "I can help with plumbing, electrical, painting, and other home repairs. Could you provide more details about your project?",
+            "tools_needed": [],
+            "safety_level": "Green"
+        }

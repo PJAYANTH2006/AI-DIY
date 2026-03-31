@@ -61,7 +61,12 @@ class handler(BaseHTTPRequestHandler):
                 if image_data:
                     if ',' in image_data:
                         image_data = image_data.split(',')[1]
-                    parts.append({"mime_type": "image/jpeg", "data": base64.b64decode(image_data)})
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": "image/jpeg", 
+                            "data": base64.b64decode(image_data)
+                        }
+                    })
                 
                 parts.append(
                     f"Respond as a DIY home repair expert.\n"
@@ -91,6 +96,7 @@ class handler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"Gemini API Error: {e}")
                 response = self.get_fallback_response(user_message)
+                response["explanation"] = f"**DEBUG - Gemini API Error**: {str(e)}\n\n" + response["explanation"]
             
             self.send_json_response(response)
             

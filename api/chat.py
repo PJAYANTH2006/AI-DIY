@@ -8,7 +8,7 @@ import google.generativeai as genai
 
 # Configure Gemini
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):

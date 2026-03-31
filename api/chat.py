@@ -29,8 +29,9 @@ class handler(BaseHTTPRequestHandler):
             client_history = data.get('history', [])
             image_data = data.get('image', None)
             
-            # Validate message topic (only strictly required on first message)
-            if not self.is_home_repair_related(user_message) and len(client_history) == 0:
+            # Validate message topic (only strictly required on first message without an image)
+            has_image = bool(image_data)
+            if not has_image and not self.is_home_repair_related(user_message) and len(client_history) == 0:
                 response = {
                     "explanation": (
                         "I specialize in DIY home repair advice. Please ask about:\n"
@@ -56,8 +57,6 @@ class handler(BaseHTTPRequestHandler):
             
             # Get response from Gemini statelessly using the history array
             try:
-                chat = model.start_chat(history=gemini_history)
-                
                 parts = []
                 if image_data:
                     if ',' in image_data:
@@ -73,7 +72,13 @@ class handler(BaseHTTPRequestHandler):
                     f"User Request: {user_message}"
                 )
                 
-                gemini_response = chat.send_message(parts)
+                # Append the new message to history
+                gemini_history.append({
+                    "role": "user",
+                    "parts": parts
+                })
+                
+                gemini_response = model.generate_content(gemini_history)
                 raw_text = gemini_response.text.strip()
                 if raw_text.startswith("```json"):
                     raw_text = raw_text[7:]
@@ -84,6 +89,7 @@ class handler(BaseHTTPRequestHandler):
                 
                 response = json.loads(raw_text.strip())
             except Exception as e:
+                print(f"Gemini API Error: {e}")
                 response = self.get_fallback_response(user_message)
             
             self.send_json_response(response)
